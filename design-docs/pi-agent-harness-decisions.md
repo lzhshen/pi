@@ -17,7 +17,7 @@
 
 ## D3 · 文档语言与产物路径
 - **问题**：文档语言与存放路径？
-- **结论**：中文写作；产物路径 `D:\02-Dev\pi\design-docs\pi-agent-harness-design.md`，决策记录同目录。
+- **结论**：中文写作；产物路径 `D:\02-Dev\lzhshen-pi\design-docs\pi-agent-harness-design.md`，决策记录同目录。
 - **理由**：用户使用中文交流；产物放项目内便于随代码版本管理。项目仓库为英文，但本文件是给用户个人理解用的衍生文档，不参与上游提交。
 - **影响章节**：无（过程决策）
 
@@ -44,3 +44,9 @@
 - **结论**：会话以 JSONL 树（id/parentId）落盘；上下文是从当前 leaf 回溯的物化视图；compaction/branch_summary 也是树节点。
 - **理由**：`session-format.md`、`compaction.md` 与源码 `session-manager.ts`、`compaction.ts` 一致。
 - **影响章节**：3.5.1、3.5.2、3.5.3
+
+## D8 · 补充代码仓结构映射（2.4 与各模块代码索引）
+- **问题**：文档缺少"逻辑架构模型 ⇄ 实际代码目录"的映射，读者无法从文档快速索引到代码。
+- **结论**：第 2 章新增 2.4 代码仓结构映射（根目录精简树 + 包名→目录映射表）；3.1–3.7 各模块 3.x.2 追加代码索引（精简目录树 + 类图节点→源文件映射表，文件级粒度）；时序图不重复映射。同时修正仓库路径为 `D:\02-Dev\lzhshen-pi`。该映射规范已同步沉淀到 design-doc 技能的 template / quality-checklist / question-bank。
+- **理由**：npm 包名与物理目录名大多不同名（如 pi-agent-core → packages/agent），且 pi-storage-sqlite-node 嵌套于 packages/storage/ 下，映射必须显式核实给出；目录树精简可避免文档随代码演进快速过时。
+- **影响章节**：2.4（新增）、3.1–3.7 各 3.x.2、文档开头与第 7 章路径

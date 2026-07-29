@@ -1,6 +1,6 @@
 # Pi Agent Harness 系统设计文档
 
-> 文档定位：基于 `D:\02-Dev\pi` 既有源码与仓内文档进行**现状还原**（as-is），不提出改进建议。
+> 文档定位：基于 `D:\02-Dev\lzhshen-pi` 既有源码与仓内文档进行**现状还原**（as-is），不提出改进建议。
 >
 > 系统名：Pi Agent Harness（npm 命名空间 `@earendil-works/*`）
 
@@ -253,6 +253,41 @@ TUI-->>User: 差分刷新终端画面
 
 ---
 
+## 2.4 代码仓结构映射
+
+本节建立"逻辑架构模型 ⇄ 实际代码目录"的全局映射；各模块内部的文件级映射见第 3 章对应小节的代码索引。**注意：npm 包名与物理目录名大多不同名**，且 `pi-storage-sqlite-node` 嵌套在 `packages/storage/` 下——按下表索引，勿凭包名猜目录。
+
+仓库根目录结构（精简：省略依赖目录与构建产物）：
+
+```
+lzhshen-pi/                       # monorepo 根
+├── packages/                     # 全部交付包，逐一映射见下表
+│   ├── ai/                       # pi-ai
+│   ├── agent/                    # pi-agent-core
+│   ├── coding-agent/             # pi-coding-agent
+│   ├── tui/                      # pi-tui
+│   ├── server/                   # pi-server
+│   ├── evals/                    # pi-evals
+│   └── storage/sqlite-node/      # pi-storage-sqlite-node（嵌套一层）
+├── scripts/                      # 发布、lockfile/shrinkwrap、模型目录生成等仓库级脚本
+├── design-docs/                  # 设计文档（本文档所在目录）
+├── AGENTS.md                     # 仓库级开发与协作规约
+├── test.sh                       # 非 e2e 测试入口
+└── package.json                  # npm workspace 根配置
+```
+
+| 包/模块 | npm 包名 | 实际目录 |
+|---|---|---|
+| **pi-ai** | `@earendil-works/pi-ai` | `packages/ai` |
+| **pi-agent-core** | `@earendil-works/pi-agent-core` | `packages/agent` |
+| **pi-coding-agent** | `@earendil-works/pi-coding-agent` | `packages/coding-agent` |
+| **pi-tui** | `@earendil-works/pi-tui` | `packages/tui` |
+| **pi-storage-sqlite-node** | `@earendil-works/pi-storage-sqlite-node` | `packages/storage/sqlite-node` |
+| **pi-server** | `@earendil-works/pi-server` | `packages/server` |
+| **pi-evals** | `@earendil-works/pi-evals` | `packages/evals` |
+
+---
+
 # 3 服务/模块详设
 
 ## 3.1 pi-ai（`@earendil-works/pi-ai`）
@@ -355,6 +390,33 @@ classDiagram
 | `amazonBedrockProvider` | `bedrock-converse-stream` | AWS SigV4 + converse stream |
 | `openrouterProvider` / `xaiProvider` / `groqProvider` / … | `openai-completions` 或自研 | 共享 API 实现 |
 
+#### 代码索引
+
+目录树为精简版（仅列架构相关文件）；映射路径相对仓库根。
+
+```
+packages/ai/src/（精简）
+├── models.ts               # Models 接口 + ModelsImpl：provider 编排、auth 应用、请求路由
+├── types.ts                # Context / Message / Tool / Api 等统一模型
+├── models-store.ts         # ModelsStore 目录缓存抽象
+├── models.generated.ts     # 构建时生成的 provider/model 目录快照（脚本生成，勿手改）
+├── auth/                   # 认证解析：resolve.ts、types.ts（CredentialStore）、oauth/
+├── api/                    # API 线协议实现（openai-responses、anthropic-messages、google-*、bedrock-converse-stream 等）
+├── providers/              # provider 工厂与静态目录；all.ts 聚合出 builtinModels()
+└── utils/event-stream.ts   # EventStream（AssistantMessageEventStream 基类）
+```
+
+| 类图节点 | 源文件 |
+|---|---|
+| `Models` / `ModelsImpl` | `packages/ai/src/models.ts` |
+| `Provider`（接口） | `packages/ai/src/models.ts` |
+| `ApiImpl`（线协议实现） | `packages/ai/src/api/*.ts` |
+| `AuthResolver`（resolveProviderAuth） | `packages/ai/src/auth/resolve.ts` |
+| `CredentialStore`（接口） | `packages/ai/src/auth/types.ts` |
+| `ModelsStore`（接口） | `packages/ai/src/models-store.ts` |
+| `EventStream` | `packages/ai/src/utils/event-stream.ts` |
+| `modelsGenerated` | `packages/ai/src/models.generated.ts` |
+
 ### 3.1.3 内部协作时序
 
 核心场景：`Models.streamSimple()` 从调用到 LLM 事件产出。
@@ -448,6 +510,28 @@ classDiagram
     NodeSqliteDatabase --> Migrations : exec
     SqliteSessionRepo --> NodeSqliteDatabase : 读写
 ```
+
+#### 代码索引
+
+目录树为精简版（仅列架构相关文件）；映射路径相对仓库根。
+
+```
+packages/storage/sqlite-node/src/（精简）
+├── index.ts                  # NodeSqliteFactory / NodeSqliteDatabase / NodeSqliteStatement
+│                             # 及 createNodeSqliteFactory() / wrapNodeSqliteDatabase()
+└── sqlite/
+    ├── repo.ts               # SqliteSessionRepo（会话聚合根读写）
+    ├── migrations.ts + migrations/  # 迁移执行与 001_initial.sql
+    ├── storage/              # SqliteSessionStorage（entry 级存储）
+    └── types.ts              # SqliteDatabase / SqliteStatement 抽象
+```
+
+| 类图节点 | 源文件 |
+|---|---|
+| `NodeSqliteFactory` / `NodeSqliteDatabase` / `NodeSqliteStatement` | `packages/storage/sqlite-node/src/index.ts` |
+| `SqliteSessionRepo` | `packages/storage/sqlite-node/src/sqlite/repo.ts` |
+| `SqliteSessionStorage` | `packages/storage/sqlite-node/src/sqlite/storage/index.ts` |
+| `Migrations` | `packages/storage/sqlite-node/src/sqlite/migrations.ts` |
 
 ### 3.2.3 内部协作时序
 
@@ -557,6 +641,28 @@ classDiagram
     Component <|.. Editor
     TUI --> ImageRenderer : 内联图片
 ```
+
+#### 代码索引
+
+目录树为精简版（仅列架构相关文件）；映射路径相对仓库根。
+
+```
+packages/tui/src/（精简）
+├── tui.ts                    # TUI / Container / Component / Focusable；差分渲染主循环（previousLines diff）
+├── terminal.ts               # Terminal 接口 + ProcessTerminal（raw mode、CSI 序列、CSI 2026）
+├── terminal-image.ts         # Kitty / iTerm2 图像协议渲染
+├── keys.ts / keybindings.ts  # matchesKey() 与键位系统
+└── components/               # Editor、Markdown、SelectList、Image、Loader 等内置组件
+```
+
+| 类图节点 | 源文件 |
+|---|---|
+| `TUI` / `Container` / `Component` / `Focusable` | `packages/tui/src/tui.ts` |
+| `Terminal` / `ProcessTerminal` | `packages/tui/src/terminal.ts` |
+| `DifferentialEngine`（差分逻辑内嵌于 TUI 渲染循环） | `packages/tui/src/tui.ts` |
+| `Editor` | `packages/tui/src/components/editor.ts` |
+| `ImageRenderer` | `packages/tui/src/terminal-image.ts` |
+| `matchesKey()` | `packages/tui/src/keys.ts` |
 
 ### 3.3.3 内部协作时序
 
@@ -677,6 +783,28 @@ classDiagram
 - 事件序列恒闭合：每个 `agent_start` 必有对应的 `agent_end`，每个 `turn_start` 必有 `turn_end`；
 - `messages` 数组赋值时顶层拷贝，避免上层直接修改导致状态漂移；
 - tool 执行失败必须 throw，由 loop 捕获并转为 `isError=true` 的 toolResult 回喂模型。
+
+#### 代码索引
+
+目录树为精简版（仅列架构相关文件）；映射路径相对仓库根。
+
+```
+packages/agent/src/（精简）
+├── agent.ts          # Agent 类 + PendingMessageQueue（steering / follow-up 队列）
+├── agent-loop.ts     # AgentLoop：双层 while、tool 执行编排（agentLoop / runAgentLoop）
+├── types.ts          # AgentState / AgentEvent / AgentMessage / AgentTool
+├── stream-fn.ts      # StreamFn 注入（setDefaultStreamFn）
+└── harness/          # harness 子层：session/（树形会话、JSONL/内存存储）、compaction/、tools/
+```
+
+| 类图节点 | 源文件 |
+|---|---|
+| `Agent` / `PendingMessageQueue` | `packages/agent/src/agent.ts` |
+| `AgentLoop`（agentLoop / runAgentLoop） | `packages/agent/src/agent-loop.ts` |
+| `AgentState` / `AgentEvent` / `AgentMessage` / `AgentTool` | `packages/agent/src/types.ts` |
+| `EventStream` | 复用 pi-ai：`packages/ai/src/utils/event-stream.ts` |
+| `Session` / 内存/JSONL storage | `packages/agent/src/harness/session/` |
+| `compact()` | `packages/agent/src/harness/compaction/compaction.ts` |
 
 ### 3.4.3 内部协作时序
 
@@ -877,6 +1005,48 @@ classDiagram
     AgentSession --> CompactionService : 自动/手动压缩
 ```
 
+#### 代码索引
+
+目录树为精简版（仅列架构相关文件）；映射路径相对仓库根。
+
+```
+packages/coding-agent/src/（精简）
+├── cli.ts / main.ts            # 进程入口 / 逻辑主入口：参数解析、信任决策、模式分发
+├── core/
+│   ├── agent-session.ts        # AgentSession 门面
+│   ├── agent-session-runtime.ts  # 会话替换（new/switch/fork/clone）
+│   ├── agent-session-services.ts # createAgentSessionServices 装配
+│   ├── session-manager.ts      # JSONL 会话树
+│   ├── settings-manager.ts     # settings.json 全局/项目合并
+│   ├── model-runtime.ts        # ModelRuntime
+│   ├── resource-loader.ts      # extensions/skills/prompts/themes 统一发现
+│   ├── extensions/             # jiti 扩展加载与运行时
+│   ├── tools/                  # 内置工具工厂（createCodingTools 等）
+│   └── compaction/             # 上下文压缩、branch summarization
+├── modes/
+│   ├── interactive/            # InteractiveMode 与 TUI 组件
+│   ├── print-mode.ts           # print 模式
+│   └── rpc/                    # RPC 模式、RpcClient、rpc-types.ts
+├── cli/                        # 启动辅助（args、session-picker、project-trust、startup-ui）
+└── extensions/llama/           # 内置 llama.cpp 扩展
+```
+
+| 类图节点 | 源文件 |
+|---|---|
+| `Main` | `packages/coding-agent/src/main.ts`（进程入口 `cli.ts`） |
+| `AgentSession` | `packages/coding-agent/src/core/agent-session.ts` |
+| `AgentSessionRuntime` | `packages/coding-agent/src/core/agent-session-runtime.ts` |
+| `SessionManager` | `packages/coding-agent/src/core/session-manager.ts` |
+| `SettingsManager` | `packages/coding-agent/src/core/settings-manager.ts` |
+| `ModelRuntime` | `packages/coding-agent/src/core/model-runtime.ts` |
+| `ResourceLoader`（DefaultResourceLoader） | `packages/coding-agent/src/core/resource-loader.ts` |
+| `ExtensionLoader` | `packages/coding-agent/src/core/extensions/loader.ts` |
+| `InteractiveMode` | `packages/coding-agent/src/modes/interactive/interactive-mode.ts` |
+| `PrintMode`（runPrintMode） | `packages/coding-agent/src/modes/print-mode.ts` |
+| `RpcMode`（runRpcMode）/ `RpcClient` | `packages/coding-agent/src/modes/rpc/rpc-mode.ts`、`rpc-client.ts` |
+| `ToolFactory` | `packages/coding-agent/src/core/tools/`（`createCodingTools` 在 `index.ts`） |
+| `CompactionService` | `packages/coding-agent/src/core/compaction/compaction.ts` |
+
 ### 3.5.3 内部协作时序
 
 核心场景：从 CLI 启动到完成一次交互式 prompt 响应。
@@ -995,6 +1165,31 @@ classDiagram
     RpcProcessInstance --> CodingAgent : spawn pi --mode rpc
 ```
 
+#### 代码索引
+
+目录树为精简版（仅列架构相关文件）；映射路径相对仓库根。
+
+```
+packages/server/src/（精简）
+├── serve.ts          # ServerDaemon：守护入口与信号处理
+├── cli.ts            # pi-server CLI（list/status/stop/spawn/rpc/rpc-stream）
+├── ipc/              # IpcServer（server.ts）/ IpcClient（client.ts）/ 协议（protocol.ts）
+├── supervisor.ts     # ServerSupervisor
+├── rpc-process.ts    # RpcProcessInstance
+├── storage.ts        # instances/machine/auth JSON 持久化
+├── radius.ts         # Radius presence
+└── types.ts          # InstanceRecord 等
+```
+
+| 类图节点 | 源文件 |
+|---|---|
+| `ServerDaemon`（serve） | `packages/server/src/serve.ts` |
+| `IpcServer` / `IpcClient` | `packages/server/src/ipc/server.ts`、`ipc/client.ts` |
+| `ServerSupervisor` | `packages/server/src/supervisor.ts` |
+| `RpcProcessInstance` | `packages/server/src/rpc-process.ts` |
+| `InstanceRecord` | `packages/server/src/types.ts` |
+| `Storage` | `packages/server/src/storage.ts` |
+
 ### 3.6.3 内部协作时序
 
 核心场景：`spawn` 一个 `pi --mode rpc` 实例并建立 `rpc_stream`。
@@ -1080,6 +1275,25 @@ classDiagram
     EvalHarness --> PiCodingAgentHarness : 复用 coding-agent 服务装配
     PiCodingAgentHarness --> AgentSession : 进程内创建
 ```
+
+#### 代码索引
+
+目录树为精简版（仅列架构相关文件）；映射路径相对仓库根。
+
+```
+packages/evals/（精简）
+├── src/
+│   ├── pi-harness.ts        # createPiCodingAgentHarness：隔离评测 harness 装配
+│   ├── smoke.eval.ts        # 冒烟 eval
+│   └── extensions.eval.ts   # 扩展行为 eval
+└── scripts/run-evals.mjs    # 评测入口脚本
+```
+
+| 类图节点 | 源文件 |
+|---|---|
+| `EvalHarness` | 外部依赖 `vitest-evals` 的 `createHarness`，经 `packages/evals/src/pi-harness.ts` 封装 |
+| `PiCodingAgentHarness` | `packages/evals/src/pi-harness.ts` |
+| `EvalTest` | `packages/evals/src/smoke.eval.ts`、`extensions.eval.ts` |
 
 ### 3.7.3 内部协作时序
 
@@ -1196,4 +1410,4 @@ Pi 在进程内**不实现权限沙盒**，原因见 `docs/security.md`：
 1. **系统边界**：以整个 monorepo 为设计对象，`pi-coding-agent` 作为核心交付物重点展开；
 2. **信息来源**：以本地源码与仓内 docs/ 为唯一事实来源，不依赖外部网站；
 3. **文档定位**：as-is 还原既有系统设计，不提出改进建议；
-4. **语言与路径**：中文写作，产物位于 `D:\02-Dev\pi\design-docs\`。
+4. **语言与路径**：中文写作，产物位于 `D:\02-Dev\lzhshen-pi\design-docs\`。
