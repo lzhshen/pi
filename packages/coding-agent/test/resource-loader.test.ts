@@ -355,7 +355,27 @@ Content`,
 			expect(agentsFiles.some((f) => f.path.includes("AGENTS.md"))).toBe(true);
 		});
 
+		it("should prefer AGENTS.override.md within each directory while preserving ancestor layering", async () => {
+			const nestedCwd = join(cwd, "service");
+			mkdirSync(nestedCwd);
+			writeFileSync(join(agentDir, "AGENTS.md"), "global instructions");
+			writeFileSync(join(agentDir, "AGENTS.override.md"), "global override");
+			writeFileSync(join(cwd, "AGENTS.md"), "project instructions");
+			writeFileSync(join(nestedCwd, "AGENTS.md"), "service instructions");
+			writeFileSync(join(nestedCwd, "AGENTS.override.md"), "service override");
+
+			const loader = new DefaultResourceLoader({ cwd: nestedCwd, agentDir });
+			await loader.reload();
+
+			expect(loader.getAgentsFiles().agentsFiles).toEqual([
+				{ path: join(agentDir, "AGENTS.override.md"), content: "global override" },
+				{ path: join(cwd, "AGENTS.md"), content: "project instructions" },
+				{ path: join(nestedCwd, "AGENTS.override.md"), content: "service override" },
+			]);
+		});
+
 		it("should ignore context file candidates that are directories", async () => {
+			mkdirSync(join(cwd, "AGENTS.override.md"));
 			mkdirSync(join(cwd, "AGENTS.md"));
 			writeFileSync(join(cwd, "CLAUDE.md"), "Fallback instructions");
 			const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -368,10 +388,12 @@ Content`,
 				content: "Fallback instructions",
 			});
 			expect(consoleError).not.toHaveBeenCalledWith(expect.stringContaining(join(cwd, "AGENTS.md")));
+			expect(consoleError).not.toHaveBeenCalledWith(expect.stringContaining(join(cwd, "AGENTS.override.md")));
 			consoleError.mockRestore();
 		});
 
-		it("should skip AGENTS.md and CLAUDE.md discovery when noContextFiles is true", async () => {
+		it("should skip context file discovery when noContextFiles is true", async () => {
+			writeFileSync(join(cwd, "AGENTS.override.md"), "# Override Guidelines\n\nBe helpful.");
 			writeFileSync(join(cwd, "AGENTS.md"), "# Project Guidelines\n\nBe helpful.");
 			writeFileSync(join(cwd, "CLAUDE.md"), "# Claude Guidelines\n\nBe helpful.");
 
@@ -448,6 +470,87 @@ Project skill content`,
 			await loader.reload();
 
 			expect(loader.getAppendSystemPrompt()).toContain("Additional instructions.");
+		});
+	});
+
+	describe("system prompt sources", () => {
+		it("exposes discovered project SYSTEM.md as the system prompt source", async () => {
+			const piDir = join(cwd, ".pi");
+			const systemPromptPath = join(piDir, "SYSTEM.md");
+			mkdirSync(piDir, { recursive: true });
+			writeFileSync(systemPromptPath, "Project system prompt.");
+
+			const loader = new DefaultResourceLoader({ cwd, agentDir });
+			await loader.reload();
+
+			expect(loader.getSystemPrompt()).toBe("Project system prompt.");
+			expect(loader.getSystemPromptSource()).toEqual({ path: systemPromptPath });
+		});
+
+		it("exposes discovered global SYSTEM.md as the system prompt source", async () => {
+			const systemPromptPath = join(agentDir, "SYSTEM.md");
+			writeFileSync(systemPromptPath, "Global system prompt.");
+
+			const loader = new DefaultResourceLoader({ cwd, agentDir });
+			await loader.reload();
+
+			expect(loader.getSystemPrompt()).toBe("Global system prompt.");
+			expect(loader.getSystemPromptSource()).toEqual({ path: systemPromptPath });
+		});
+
+		it("does not expose literal system prompt text as a source", async () => {
+			const loader = new DefaultResourceLoader({ cwd, agentDir, systemPrompt: "Literal system prompt." });
+			await loader.reload();
+
+			expect(loader.getSystemPrompt()).toBe("Literal system prompt.");
+			expect(loader.getSystemPromptSource()).toBeUndefined();
+		});
+
+		it("exposes file-backed system prompt options as a source", async () => {
+			const systemPromptPath = join(tempDir, "custom-system.md");
+			writeFileSync(systemPromptPath, "Custom system prompt.");
+
+			const loader = new DefaultResourceLoader({ cwd, agentDir, systemPrompt: systemPromptPath });
+			await loader.reload();
+
+			expect(loader.getSystemPrompt()).toBe("Custom system prompt.");
+			expect(loader.getSystemPromptSource()).toEqual({ path: systemPromptPath });
+		});
+
+		it("exposes discovered APPEND_SYSTEM.md as an append system prompt source", async () => {
+			const piDir = join(cwd, ".pi");
+			const appendSystemPromptPath = join(piDir, "APPEND_SYSTEM.md");
+			mkdirSync(piDir, { recursive: true });
+			writeFileSync(appendSystemPromptPath, "Project append prompt.");
+
+			const loader = new DefaultResourceLoader({ cwd, agentDir });
+			await loader.reload();
+
+			expect(loader.getAppendSystemPrompt()).toEqual(["Project append prompt."]);
+			expect(loader.getAppendSystemPromptSources()).toEqual([{ path: appendSystemPromptPath }]);
+		});
+
+		it("does not expose literal append system prompt text as a source", async () => {
+			const loader = new DefaultResourceLoader({ cwd, agentDir, appendSystemPrompt: ["Literal append prompt."] });
+			await loader.reload();
+
+			expect(loader.getAppendSystemPrompt()).toEqual(["Literal append prompt."]);
+			expect(loader.getAppendSystemPromptSources()).toEqual([]);
+		});
+
+		it("only exposes file-backed append system prompt options as sources", async () => {
+			const appendSystemPromptPath = join(tempDir, "custom-append.md");
+			writeFileSync(appendSystemPromptPath, "Custom append prompt.");
+
+			const loader = new DefaultResourceLoader({
+				cwd,
+				agentDir,
+				appendSystemPrompt: [appendSystemPromptPath, "Literal append prompt."],
+			});
+			await loader.reload();
+
+			expect(loader.getAppendSystemPrompt()).toEqual(["Custom append prompt.", "Literal append prompt."]);
+			expect(loader.getAppendSystemPromptSources()).toEqual([{ path: appendSystemPromptPath }]);
 		});
 	});
 
